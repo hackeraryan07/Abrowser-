@@ -1,6 +1,7 @@
 package com.example
 
 import android.annotation.SuppressLint
+import kotlinx.coroutines.launch
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.ViewGroup
@@ -177,7 +178,7 @@ fun BrowserApp(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { 
@@ -185,16 +186,17 @@ fun BrowserApp(
                             inputUrl = ""
                             currentTab.webView?.loadUrl("about:blank")
                         }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Outlined.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Outlined.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         if (!isHome) {
                             Spacer(modifier = Modifier.width(4.dp))
-                            OutlinedTextField(
-                                value = inputUrl,
+                            val displayUrl = if (isInputUrlFocused) inputUrl else inputUrl.replace(Regex("^https?://(www\\.)?"), "")
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = displayUrl,
                                 onValueChange = { inputUrl = it },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(52.dp)
+                                    .height(44.dp)
                                     .onFocusChanged { isInputUrlFocused = it.isFocused },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(
@@ -217,118 +219,186 @@ fun BrowserApp(
                                         }
                                     }
                                 ),
-                                leadingIcon = {
-                                    Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                },
-                                shape = CircleShape,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                                ),
                                 textStyle = androidx.compose.ui.text.TextStyle(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp)
-                                )
+                                ),
+                                decorationBox = { innerTextField ->
+                                    androidx.compose.material3.Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 12.dp)
+                                        ) {
+                                            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                                if (displayUrl.isEmpty()) {
+                                                    Text("Search or type URL", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), fontSize = 16.sp)
+                                                }
+                                                innerTextField()
+                                            }
+                                        }
+                                    }
+                                }
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
                             IconButton(onClick = { 
                                 tabs.add(TabState())
                                 currentTabIndex = tabs.lastIndex
-                            }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.Add, contentDescription = "New Tab", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Add, contentDescription = "New Tab", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
                         } else {
                             Spacer(modifier = Modifier.weight(1f))
                         }
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(24.dp)
-                                .border(2.dp, MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                .size(22.dp)
+                                .border(3.dp, MaterialTheme.colorScheme.onSurface, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
                                 .clickable { showTabManagement = true }
                         ) {
-                            Text("${tabs.size}", style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant))
+                            Text("${tabs.size}", style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface))
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
                         var menuExpanded by remember { mutableStateOf(false) }
+
                         Box(contentAlignment = Alignment.Center) {
-                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
                             }
                             
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false },
-                                modifier = Modifier.defaultMinSize(minWidth = 200.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                            if (menuExpanded) {
+                                androidx.compose.ui.window.Popup(
+                                    alignment = Alignment.TopEnd,
+                                    offset = androidx.compose.ui.unit.IntOffset(x = 12, y = -32),
+                                    onDismissRequest = { menuExpanded = false },
+                                    properties = androidx.compose.ui.window.PopupProperties(focusable = true)
                                 ) {
-                                    IconButton(
-                                        onClick = { 
-                                            currentTab.webView?.goBack()
-                                            menuExpanded = false
-                                        },
-                                        enabled = canGoBack
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                    }
-                                    IconButton(
-                                        onClick = { 
-                                            currentTab.webView?.goForward()
-                                            menuExpanded = false
-                                        },
-                                        enabled = canGoForward
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
-                                    }
-                                    IconButton(
-                                        onClick = { 
-                                            // Handle favorite
+                                    var appear by remember { mutableStateOf(false) }
+                                    LaunchedEffect(Unit) { appear = true }
+                                    
+                                    val coroutineScope = rememberCoroutineScope()
+                                    fun dismiss() {
+                                        coroutineScope.launch {
+                                            appear = false
+                                            kotlinx.coroutines.delay(200)
                                             menuExpanded = false
                                         }
-                                    ) {
-                                        Icon(Icons.Default.StarBorder, contentDescription = "Favorite")
                                     }
-                                    IconButton(
-                                        onClick = { 
-                                            currentTab.webView?.reload()
-                                            menuExpanded = false
-                                        }
+
+                                    androidx.compose.animation.AnimatedVisibility(
+                                        visible = appear,
+                                        enter = androidx.compose.animation.scaleIn(transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(250)),
+                                        exit = androidx.compose.animation.scaleOut(transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(200)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200))
                                     ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Reload")
+                                        Surface(
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            shadowElevation = 8.dp,
+                                            modifier = Modifier.width(260.dp)
+                                        ) {
+                                            Column {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    @Composable
+                                                    fun TopMenuButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDesc: String, enabled: Boolean = true, delayMs: Long) {
+                                                        var btnAppear by remember { mutableStateOf(false) }
+                                                        LaunchedEffect(Unit) { kotlinx.coroutines.delay(delayMs); btnAppear = true }
+                                                        
+                                                        androidx.compose.animation.AnimatedVisibility(
+                                                            visible = btnAppear && appear,
+                                                            enter = androidx.compose.animation.scaleIn(animationSpec = androidx.compose.animation.core.tween(250, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(250)),
+                                                            exit = androidx.compose.animation.scaleOut(animationSpec = androidx.compose.animation.core.tween(150)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
+                                                        ) {
+                                                            Surface(
+                                                                onClick = onClick,
+                                                                enabled = enabled,
+                                                                shape = CircleShape,
+                                                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                                                modifier = Modifier.size(40.dp)
+                                                            ) {
+                                                                Box(contentAlignment = Alignment.Center) {
+                                                                    Icon(icon, contentDescription = contentDesc, tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f), modifier = Modifier.size(22.dp))
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    TopMenuButton(
+                                                        onClick = { currentTab.webView?.goBack(); dismiss() },
+                                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                                        contentDesc = "Back",
+                                                        enabled = canGoBack,
+                                                        delayMs = 50
+                                                    )
+                                                    TopMenuButton(
+                                                        onClick = { currentTab.webView?.goForward(); dismiss() },
+                                                        icon = Icons.AutoMirrored.Filled.ArrowForward,
+                                                        contentDesc = "Forward",
+                                                        enabled = canGoForward,
+                                                        delayMs = 100
+                                                    )
+                                                    TopMenuButton(
+                                                        onClick = { dismiss() },
+                                                        icon = Icons.Default.StarBorder,
+                                                        contentDesc = "Favorite",
+                                                        delayMs = 150
+                                                    )
+                                                    TopMenuButton(
+                                                        onClick = { currentTab.webView?.reload(); dismiss() },
+                                                        icon = Icons.Default.Refresh,
+                                                        contentDesc = "Reload",
+                                                        delayMs = 200
+                                                    )
+                                                }
+                                                
+                                                DropdownMenuItem(
+                                                    text = { Text("New tab", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)) },
+                                                    leadingIcon = { 
+                                                        Box(
+                                                            contentAlignment = Alignment.Center,
+                                                            modifier = Modifier
+                                                                .size(24.dp)
+                                                                .border(3.dp, MaterialTheme.colorScheme.onSurface, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                                        ) {
+                                                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+                                                        }
+                                                    },
+                                                    onClick = { 
+                                                        dismiss()
+                                                        tabs.add(TabState())
+                                                        currentTabIndex = tabs.lastIndex
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("History", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) },
+                                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface) },
+                                                    onClick = { 
+                                                        dismiss()
+                                                        showHistory = true
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Settings", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) },
+                                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface) },
+                                                    onClick = { 
+                                                        dismiss()
+                                                        showSettings = true
+                                                    }
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                        }
                                     }
                                 }
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                DropdownMenuItem(
-                                    text = { Text("New tab") },
-                                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                                    onClick = { 
-                                        menuExpanded = false
-                                        tabs.add(TabState())
-                                        currentTabIndex = tabs.lastIndex
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("History") },
-                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
-                                    onClick = { 
-                                        menuExpanded = false
-                                        showHistory = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Settings") },
-                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                    onClick = { 
-                                        menuExpanded = false
-                                        showSettings = true
-                                    }
-                                )
                             }
                         }
                     }
@@ -707,6 +777,8 @@ fun SettingsScreen(
     }
 }
 
+data class Shortcut(val title: String, val url: String)
+
 @Composable
 fun BrowserHomeScreen(
     onSearch: (String) -> Unit
@@ -714,9 +786,10 @@ fun BrowserHomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(top = 64.dp) // shift content drastically up
             .background(MaterialTheme.colorScheme.background),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Top
     ) {
         Surface(
             modifier = Modifier.size(64.dp),
@@ -803,6 +876,127 @@ fun BrowserHomeScreen(
                     }
                 }
             }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        var showAddShortcutDialog by remember { mutableStateOf(false) }
+        var shortcutTitle by remember { mutableStateOf("") }
+        var shortcutUrl by remember { mutableStateOf("") }
+        var shortcuts by remember { mutableStateOf(listOf<Shortcut>()) }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.9f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ) {
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                shortcuts.forEach { shortcut ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(64.dp).clickable { onSearch(shortcut.url) }
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                coil.compose.AsyncImage(
+                                    model = "https://www.google.com/s2/favicons?sz=64&domain_url=${java.net.URLEncoder.encode(shortcut.url, "UTF-8")}",
+                                    contentDescription = shortcut.title,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = shortcut.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(64.dp).clickable { showAddShortcutDialog = true }
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Add, contentDescription = "Add shortcut", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Add",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        if (showAddShortcutDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddShortcutDialog = false },
+                title = { Text("Add shortcut") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = shortcutTitle,
+                            onValueChange = { shortcutTitle = it },
+                            label = { Text("Title") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = shortcutUrl,
+                            onValueChange = { shortcutUrl = it },
+                            label = { Text("URL") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (shortcutTitle.isNotBlank() && shortcutUrl.isNotBlank()) {
+                                val url = if (!shortcutUrl.startsWith("http://") && !shortcutUrl.startsWith("https://")) {
+                                    "https://$shortcutUrl"
+                                } else {
+                                    shortcutUrl
+                                }
+                                shortcuts = shortcuts + Shortcut(shortcutTitle.trim(), url)
+                                showAddShortcutDialog = false
+                                shortcutTitle = ""
+                                shortcutUrl = ""
+                            }
+                        }
+                    ) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddShortcutDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }
