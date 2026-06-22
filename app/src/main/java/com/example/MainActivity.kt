@@ -236,6 +236,14 @@ fun BrowserApp(
         pendingGeoOrigin = null
     }
 
+    var pendingDownloadAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val downloadPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        pendingDownloadAction?.invoke()
+        pendingDownloadAction = null
+    }
+
     LaunchedEffect(tabs.map { it.url.value }, currentTabIndex) {
         val jsonArray = org.json.JSONArray()
         for (tab in tabs) {
@@ -636,22 +644,48 @@ fun BrowserApp(
                             }
                             
                             setDownloadListener { downloadUrl, userAgent, contentDisposition, mimetype, contentLength ->
-                                val request = android.app.DownloadManager.Request(android.net.Uri.parse(downloadUrl))
-                                request.setMimeType(mimetype)
-                                val cookies = android.webkit.CookieManager.getInstance().getCookie(downloadUrl)
-                                request.addRequestHeader("cookie", cookies)
-                                request.addRequestHeader("User-Agent", userAgent)
-                                request.setDescription("Downloading file...")
-                                request.setTitle(android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype))
-                                request.allowScanningByMediaScanner()
-                                request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                request.setDestinationInExternalPublicDir(
-                                    android.os.Environment.DIRECTORY_DOWNLOADS,
-                                    android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype)
-                                )
-                                val dm = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-                                dm.enqueue(request)
-                                android.widget.Toast.makeText(context, "Downloading File...", android.widget.Toast.LENGTH_LONG).show()
+                                val downloadAction = {
+                                    try {
+                                        if (downloadUrl.startsWith("blob:") || downloadUrl.startsWith("data:")) {
+                                            android.widget.Toast.makeText(context, "Cannot download this type of file directly. Try long pressing the link.", android.widget.Toast.LENGTH_LONG).show()
+                                        } else {
+                                            val request = android.app.DownloadManager.Request(android.net.Uri.parse(downloadUrl))
+                                            request.setMimeType(mimetype)
+                                            val cookies = android.webkit.CookieManager.getInstance().getCookie(downloadUrl)
+                                            request.addRequestHeader("cookie", cookies)
+                                            request.addRequestHeader("User-Agent", userAgent)
+                                            request.setDescription("Downloading file...")
+                                            request.setTitle(android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype))
+                                            request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                            request.setDestinationInExternalPublicDir(
+                                                android.os.Environment.DIRECTORY_DOWNLOADS,
+                                                android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype)
+                                            )
+                                            val dm = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                                            dm.enqueue(request)
+                                            android.widget.Toast.makeText(context, "Downloading File...", android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Download failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+
+                                val perms = mutableListOf<String>()
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && 
+                                    androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q && 
+                                    androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    perms.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                }
+                                
+                                if (perms.isNotEmpty()) {
+                                    pendingDownloadAction = downloadAction
+                                    downloadPermissionLauncher.launch(perms.toTypedArray())
+                                } else {
+                                    downloadAction()
+                                }
                             }
                             
                             if (tab.url.value.isNotEmpty() && tab.url.value != "about:blank") {
