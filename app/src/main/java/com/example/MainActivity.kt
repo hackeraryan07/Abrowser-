@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.Home
@@ -125,6 +126,7 @@ fun BrowserApp(
 
     val isHome = currentUrl.isEmpty() || currentUrl == "about:blank"
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     BackHandler(enabled = canGoBack || !isHome || showSettings || showTabManagement || showHistory) {
         if (showSettings) {
@@ -181,6 +183,7 @@ fun BrowserApp(
                                     val url = inputUrl.trim()
                                     if (url.isNotEmpty()) {
                                         keyboardController?.hide()
+                                        focusManager.clearFocus()
                                         val loadUrl = if (android.util.Patterns.WEB_URL.matcher(url).matches() || url.startsWith("http://") || url.startsWith("https://")) {
                                             if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
                                         } else {
@@ -319,14 +322,15 @@ fun BrowserApp(
             tabs.forEachIndexed { index, tab ->
                 val isTabVisible = (index == currentTabIndex) && !isHome
                 
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { context ->
-                        tab.webView ?: WebView(context).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
+                androidx.compose.runtime.key(tab.id) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { context ->
+                            tab.webView ?: WebView(context).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -400,6 +404,7 @@ fun BrowserApp(
                         }
                     }
                 )
+                }
             }
 
             if (isHome) {
@@ -438,14 +443,18 @@ fun BrowserApp(
                 showTabManagement = false
             },
             onTabClosed = { index ->
-                tabs.removeAt(index)
-                if (tabs.isEmpty()) {
+                if (tabs.size == 1) {
+                    tabs.clear()
                     tabs.add(TabState())
                     currentTabIndex = 0
-                } else if (currentTabIndex >= tabs.size) {
-                    currentTabIndex = tabs.size - 1
-                } else if (currentTabIndex > index) {
-                    currentTabIndex--
+                    showTabManagement = false
+                } else {
+                    tabs.removeAt(index)
+                    if (currentTabIndex >= tabs.size) {
+                        currentTabIndex = tabs.size - 1
+                    } else if (currentTabIndex > index) {
+                        currentTabIndex--
+                    }
                 }
             },
             onNewTab = {
@@ -675,6 +684,7 @@ fun BrowserHomeScreen(
         
         Spacer(modifier = Modifier.height(48.dp))
         var inputQuery by remember { mutableStateOf("") }
+        val focusManager = LocalFocusManager.current
         OutlinedTextField(
             value = inputQuery,
             onValueChange = { inputQuery = it },
@@ -694,7 +704,9 @@ fun BrowserHomeScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
             keyboardActions = KeyboardActions(onGo = { 
                 if (inputQuery.trim().isNotEmpty()) {
+                    focusManager.clearFocus()
                     onSearch(inputQuery.trim())
+                    inputQuery = ""
                 }
             })
         )
