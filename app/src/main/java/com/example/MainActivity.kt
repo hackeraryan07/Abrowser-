@@ -186,7 +186,7 @@ fun BrowserApp(
                             inputUrl = ""
                             currentTab.webView?.loadUrl("about:blank")
                         }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Outlined.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface)
+                            Icon(androidx.compose.ui.res.painterResource(id = R.drawable.ic_home_custom), contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                         }
                         if (!isHome) {
                             Spacer(modifier = Modifier.width(4.dp))
@@ -287,15 +287,15 @@ fun BrowserApp(
                                     fun dismiss() {
                                         coroutineScope.launch {
                                             appear = false
-                                            kotlinx.coroutines.delay(200)
+                                            kotlinx.coroutines.delay(150)
                                             menuExpanded = false
                                         }
                                     }
 
                                     androidx.compose.animation.AnimatedVisibility(
                                         visible = appear,
-                                        enter = androidx.compose.animation.scaleIn(transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(250)),
-                                        exit = androidx.compose.animation.scaleOut(transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(200)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200))
+                                        enter = androidx.compose.animation.scaleIn(initialScale = 0.9f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)),
+                                        exit = androidx.compose.animation.scaleOut(targetScale = 0.9f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(150)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
                                     ) {
                                         Surface(
                                             shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
@@ -309,25 +309,16 @@ fun BrowserApp(
                                                     horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
                                                     @Composable
-                                                    fun TopMenuButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDesc: String, enabled: Boolean = true, delayMs: Long) {
-                                                        var btnAppear by remember { mutableStateOf(false) }
-                                                        LaunchedEffect(Unit) { kotlinx.coroutines.delay(delayMs); btnAppear = true }
-                                                        
-                                                        androidx.compose.animation.AnimatedVisibility(
-                                                            visible = btnAppear && appear,
-                                                            enter = androidx.compose.animation.scaleIn(animationSpec = androidx.compose.animation.core.tween(250, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(250)),
-                                                            exit = androidx.compose.animation.scaleOut(animationSpec = androidx.compose.animation.core.tween(150)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
+                                                    fun TopMenuButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDesc: String, enabled: Boolean = true) {
+                                                        Surface(
+                                                            onClick = onClick,
+                                                            enabled = enabled,
+                                                            shape = CircleShape,
+                                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                                            modifier = Modifier.size(40.dp)
                                                         ) {
-                                                            Surface(
-                                                                onClick = onClick,
-                                                                enabled = enabled,
-                                                                shape = CircleShape,
-                                                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                                                modifier = Modifier.size(40.dp)
-                                                            ) {
-                                                                Box(contentAlignment = Alignment.Center) {
-                                                                    Icon(icon, contentDescription = contentDesc, tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f), modifier = Modifier.size(22.dp))
-                                                                }
+                                                            Box(contentAlignment = Alignment.Center) {
+                                                                Icon(icon, contentDescription = contentDesc, tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f), modifier = Modifier.size(22.dp))
                                                             }
                                                         }
                                                     }
@@ -336,27 +327,23 @@ fun BrowserApp(
                                                         onClick = { currentTab.webView?.goBack(); dismiss() },
                                                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                                                         contentDesc = "Back",
-                                                        enabled = canGoBack,
-                                                        delayMs = 50
+                                                        enabled = canGoBack
                                                     )
                                                     TopMenuButton(
                                                         onClick = { currentTab.webView?.goForward(); dismiss() },
                                                         icon = Icons.AutoMirrored.Filled.ArrowForward,
                                                         contentDesc = "Forward",
-                                                        enabled = canGoForward,
-                                                        delayMs = 100
+                                                        enabled = canGoForward
                                                     )
                                                     TopMenuButton(
                                                         onClick = { dismiss() },
                                                         icon = Icons.Default.StarBorder,
-                                                        contentDesc = "Favorite",
-                                                        delayMs = 150
+                                                        contentDesc = "Favorite"
                                                     )
                                                     TopMenuButton(
                                                         onClick = { currentTab.webView?.reload(); dismiss() },
                                                         icon = Icons.Default.Refresh,
-                                                        contentDesc = "Reload",
-                                                        delayMs = 200
+                                                        contentDesc = "Reload"
                                                     )
                                                 }
                                                 
