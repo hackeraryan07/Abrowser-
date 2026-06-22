@@ -13,6 +13,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -34,6 +37,8 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -134,6 +139,8 @@ fun BrowserApp(
     var showSettings by remember { mutableStateOf(false) }
     var showTabManagement by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var fullScreenMode by remember { mutableStateOf(false) }
+    var showFullScreenButton by remember { mutableStateOf(false) }
     val history = remember { androidx.compose.runtime.mutableStateListOf<String>() }
 
     val isHome = currentUrl.isEmpty() || currentUrl == "about:blank"
@@ -245,10 +252,11 @@ fun BrowserApp(
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.background,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+                    if (!fullScreenMode) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.background,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                 Column {
                     Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                     Row(
@@ -356,6 +364,7 @@ fun BrowserApp(
                         Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
+            }
             }
         }
     ) { innerPadding ->
@@ -490,6 +499,85 @@ fun BrowserApp(
                     }
                 }
             }
+            
+            if (showFullScreenButton) {
+                var buttonOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+                var isDragging by remember { mutableStateOf(false) }
+                var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                var isDimmed by remember { mutableStateOf(true) }
+                var parentSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+                var buttonSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+                
+                LaunchedEffect(isDragging, lastInteractionTime) {
+                    if (!isDragging) {
+                        isDimmed = false
+                        kotlinx.coroutines.delay(3000)
+                        isDimmed = true
+                    } else {
+                        isDimmed = false
+                    }
+                }
+                
+                val animatedAlpha by animateFloatAsState(targetValue = if (isDimmed) 0.5f else 1f, label = "alpha")
+                val simulatedOffsetX = if (buttonOffset == androidx.compose.ui.geometry.Offset.Zero && parentSize.width > 0) parentSize.width - buttonSize.width - 48f else buttonOffset.x
+                val simulatedOffsetY = if (buttonOffset == androidx.compose.ui.geometry.Offset.Zero && parentSize.height > 0) parentSize.height - buttonSize.height - 48f else buttonOffset.y
+                
+                val animatedOffsetX by animateFloatAsState(targetValue = if (isDimmed && !isDragging) {
+                    if (simulatedOffsetX > parentSize.width / 2f) (parentSize.width - (buttonSize.width / 2.5f)) else -(buttonSize.width * 1.5f / 2.5f)
+                } else simulatedOffsetX, label = "offsetX")
+                
+                val animatedOffsetY by animateFloatAsState(targetValue = simulatedOffsetY, label = "offsetY")
+                
+                // Invisible full screen tracker to get size
+                Box(Modifier.fillMaxSize().onSizeChanged { parentSize = it })
+                
+                Box(
+                    modifier = Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset(kotlin.math.round(animatedOffsetX).toInt(), kotlin.math.round(animatedOffsetY).toInt()) }
+                        .onSizeChanged { buttonSize = it }
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { isDragging = true; lastInteractionTime = System.currentTimeMillis() },
+                                onDragEnd = {
+                                    isDragging = false
+                                    lastInteractionTime = System.currentTimeMillis()
+                                    val safeX = simulatedOffsetX.coerceIn(0f, (parentSize.width - buttonSize.width).toFloat())
+                                    val safeY = simulatedOffsetY.coerceIn(0f, (parentSize.height - buttonSize.height).toFloat())
+                                    val snapX = if (safeX > (parentSize.width - buttonSize.width) / 2f) (parentSize.width - buttonSize.width).toFloat() else 0f
+                                    buttonOffset = androidx.compose.ui.geometry.Offset(snapX, safeY)
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    if (buttonOffset == androidx.compose.ui.geometry.Offset.Zero) {
+                                        buttonOffset = androidx.compose.ui.geometry.Offset(simulatedOffsetX, simulatedOffsetY)
+                                    }
+                                    buttonOffset += dragAmount
+                                }
+                            )
+                        }
+                        .graphicsLayer { alpha = animatedAlpha }
+                ) {
+                    Surface(
+                        onClick = { 
+                            lastInteractionTime = System.currentTimeMillis()
+                            fullScreenMode = !fullScreenMode 
+                        },
+                        modifier = Modifier.size(56.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shadowElevation = 6.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (fullScreenMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, 
+                                contentDescription = "Toggle Fullscreen", 
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
         }
 
@@ -512,6 +600,11 @@ fun BrowserApp(
             onThemeChange = onThemeChange,
             immersiveMode = immersiveMode,
             onImmersiveChange = onImmersiveChange,
+            showFullScreenButton = showFullScreenButton,
+            onShowFullScreenButtonChange = { 
+                showFullScreenButton = it
+                if (!it) fullScreenMode = false
+            },
             onBack = { showSettings = false }
         )
     }
@@ -685,6 +778,8 @@ fun SettingsScreen(
     onThemeChange: (ThemeMode) -> Unit,
     immersiveMode: Boolean,
     onImmersiveChange: (Boolean) -> Unit,
+    showFullScreenButton: Boolean,
+    onShowFullScreenButtonChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -727,6 +822,17 @@ fun SettingsScreen(
                     Switch(
                         checked = immersiveMode,
                         onCheckedChange = { onImmersiveChange(it) }
+                    )
+                }
+            )
+            
+            ListItem(
+                headlineContent = { Text("Show Full Screen Button") },
+                supportingContent = { Text("Shows a floating button to quickly toggle full screen") },
+                trailingContent = {
+                    Switch(
+                        checked = showFullScreenButton,
+                        onCheckedChange = { onShowFullScreenButtonChange(it) }
                     )
                 }
             )
