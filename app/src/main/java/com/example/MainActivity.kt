@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.border
@@ -85,8 +86,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            var themeMode by remember { mutableStateOf(ThemeMode.System) }
-            var immersiveMode by remember { mutableStateOf(false) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val sharedPreferences = remember { context.getSharedPreferences("browser_prefs", android.content.Context.MODE_PRIVATE) }
+            
+            var themeMode by remember { 
+                mutableStateOf(ThemeMode.valueOf(sharedPreferences.getString("theme", ThemeMode.System.name) ?: ThemeMode.System.name)) 
+            }
+            var immersiveMode by remember { 
+                mutableStateOf(sharedPreferences.getBoolean("immersive", false)) 
+            }
+            var showFullScreenButton by remember {
+                mutableStateOf(sharedPreferences.getBoolean("showFullScreenButton", false))
+            }
 
             val darkTheme = when (themeMode) {
                 ThemeMode.System -> isSystemInDarkTheme()
@@ -107,9 +118,20 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme(darkTheme = darkTheme) {
                 BrowserApp(
                     themeMode = themeMode,
-                    onThemeChange = { themeMode = it },
+                    onThemeChange = { 
+                        themeMode = it
+                        sharedPreferences.edit().putString("theme", it.name).apply()
+                    },
                     immersiveMode = immersiveMode,
-                    onImmersiveChange = { immersiveMode = it }
+                    onImmersiveChange = { 
+                        immersiveMode = it
+                        sharedPreferences.edit().putBoolean("immersive", it).apply()
+                    },
+                    showFullScreenButton = showFullScreenButton,
+                    onShowFullScreenButtonChange = {
+                        showFullScreenButton = it
+                        sharedPreferences.edit().putBoolean("showFullScreenButton", it).apply()
+                    }
                 )
             }
         }
@@ -123,11 +145,96 @@ fun BrowserApp(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     immersiveMode: Boolean,
-    onImmersiveChange: (Boolean) -> Unit
+    onImmersiveChange: (Boolean) -> Unit,
+    showFullScreenButton: Boolean,
+    onShowFullScreenButtonChange: (Boolean) -> Unit
 ) {
     var isMenuOpen by remember { mutableStateOf(false) }
-    val tabs = remember { androidx.compose.runtime.mutableStateListOf(TabState()) }
-    var currentTabIndex by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sharedPreferences = remember { context.getSharedPreferences("browser_prefs", android.content.Context.MODE_PRIVATE) }
+    
+    val tabs = remember { 
+        val savedTabsJson = sharedPreferences.getString("saved_tabs", null)
+        val initialTabs = androidx.compose.runtime.mutableStateListOf<TabState>()
+        if (savedTabsJson != null) {
+            try {
+                val jsonArray = org.json.JSONArray(savedTabsJson)
+                for (i in 0 until jsonArray.length()) {
+                    val url = jsonArray.getString(i)
+                    initialTabs.add(TabState(url = androidx.compose.runtime.mutableStateOf(url)))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        if (initialTabs.isEmpty()) {
+            initialTabs.add(TabState())
+        }
+        initialTabs
+    }
+    var currentTabIndex by remember { 
+        androidx.compose.runtime.mutableIntStateOf(
+            sharedPreferences.getInt("current_tab_index", 0).coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
+        )
+    }
+
+    var filePathCallback by remember { mutableStateOf<android.webkit.ValueCallback<Array<android.net.Uri>>?>(null) }
+    val fileChooserLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data
+            val uris = if (data?.clipData != null) {
+                val count = data.clipData!!.itemCount
+                Array(count) { i -> data.clipData!!.getItemAt(i).uri }
+            } else if (data?.data != null) {
+                arrayOf(data.data!!)
+            } else {
+                null
+            }
+            filePathCallback?.onReceiveValue(uris)
+        } else {
+            filePathCallback?.onReceiveValue(null)
+        }
+        filePathCallback = null
+    }
+
+    var pendingWebViewPermissionRequest by remember { mutableStateOf<android.webkit.PermissionRequest?>(null) }
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val hasAll = permissions.values.all { it }
+        pendingWebViewPermissionRequest?.let { req ->
+            if (hasAll) {
+                req.grant(req.resources)
+            } else {
+                req.deny()
+            }
+            pendingWebViewPermissionRequest = null
+        }
+    }
+
+    var pendingGeoCallback by remember { mutableStateOf<android.webkit.GeolocationPermissions.Callback?>(null) }
+    var pendingGeoOrigin by remember { mutableStateOf<String?>(null) }
+    val geoPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val hasAll = permissions.values.all { it }
+        pendingGeoCallback?.invoke(pendingGeoOrigin, hasAll, false)
+        pendingGeoCallback = null
+        pendingGeoOrigin = null
+    }
+
+    LaunchedEffect(tabs.map { it.url.value }, currentTabIndex) {
+        val jsonArray = org.json.JSONArray()
+        for (tab in tabs) {
+            jsonArray.put(tab.url.value)
+        }
+        sharedPreferences.edit()
+            .putString("saved_tabs", jsonArray.toString())
+            .putInt("current_tab_index", currentTabIndex)
+            .apply()
+    }
 
     val currentTab = tabs.getOrNull(currentTabIndex) ?: return
     val currentUrl = currentTab.url.value
@@ -139,8 +246,8 @@ fun BrowserApp(
     var showSettings by remember { mutableStateOf(false) }
     var showTabManagement by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showDownloads by remember { mutableStateOf(false) }
     var fullScreenMode by remember { mutableStateOf(false) }
-    var showFullScreenButton by remember { mutableStateOf(false) }
     val history = remember { androidx.compose.runtime.mutableStateListOf<String>() }
 
     val isHome = currentUrl.isEmpty() || currentUrl == "about:blank"
@@ -157,7 +264,7 @@ fun BrowserApp(
         }
     }
 
-    BackHandler(enabled = isMenuOpen || canGoBack || !isHome || showSettings || showTabManagement || showHistory || appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
+    BackHandler(enabled = isMenuOpen || canGoBack || !isHome || showSettings || showTabManagement || showHistory || showDownloads || appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
         if (isMenuOpen) {
             isMenuOpen = false
         } else if (appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
@@ -171,6 +278,8 @@ fun BrowserApp(
             showTabManagement = false
         } else if (showHistory) {
             showHistory = false
+        } else if (showDownloads) {
+            showDownloads = false
         } else if (canGoBack) {
             currentTab.webView?.goBack()
         } else {
@@ -226,6 +335,12 @@ fun BrowserApp(
                     headlineContent = { Text("History", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold)) },
                     leadingContent = { Icon(Icons.Default.History, contentDescription = null) },
                     modifier = Modifier.clickable { isMenuOpen = false; showHistory = true },
+                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                )
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("Downloads", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold)) },
+                    leadingContent = { Icon(Icons.Default.Download, contentDescription = null) },
+                    modifier = Modifier.clickable { isMenuOpen = false; showDownloads = true },
                     colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
                 )
                 androidx.compose.material3.ListItem(
@@ -383,6 +498,9 @@ fun BrowserApp(
                                 )
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
+                            settings.setGeolocationEnabled(true)
+                            settings.allowFileAccess = true
+                            settings.allowContentAccess = true
                             settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                             settings.setSupportMultipleWindows(true)
                             settings.javaScriptCanOpenWindowsAutomatically = true
@@ -439,6 +557,70 @@ fun BrowserApp(
                                     resultMsg?.sendToTarget()
                                     return true
                                 }
+
+                                override fun onShowFileChooser(
+                                    webView: WebView?,
+                                    filePathCb: android.webkit.ValueCallback<Array<android.net.Uri>>?,
+                                    fileChooserParams: FileChooserParams?
+                                ): Boolean {
+                                    filePathCallback = filePathCb
+                                    val intent = fileChooserParams?.createIntent()
+                                    if (intent != null) {
+                                        fileChooserLauncher.launch(intent)
+                                        return true
+                                    }
+                                    return false
+                                }
+
+                                override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                                    if (request == null) return
+                                    val androidPermissions = mutableListOf<String>()
+                                    request.resources.forEach { res ->
+                                        when (res) {
+                                            android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE -> androidPermissions.add(android.Manifest.permission.CAMERA)
+                                            android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE -> androidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    }
+                                    if (androidPermissions.isNotEmpty()) {
+                                        pendingWebViewPermissionRequest = request
+                                        permissionLauncher.launch(androidPermissions.toTypedArray())
+                                    } else {
+                                        request.grant(request.resources)
+                                    }
+                                }
+
+                                override fun onGeolocationPermissionsShowPrompt(
+                                    origin: String?,
+                                    callback: android.webkit.GeolocationPermissions.Callback?
+                                ) {
+                                    pendingGeoOrigin = origin
+                                    pendingGeoCallback = callback
+                                    geoPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
+                            }
+                            
+                            setDownloadListener { downloadUrl, userAgent, contentDisposition, mimetype, contentLength ->
+                                val request = android.app.DownloadManager.Request(android.net.Uri.parse(downloadUrl))
+                                request.setMimeType(mimetype)
+                                val cookies = android.webkit.CookieManager.getInstance().getCookie(downloadUrl)
+                                request.addRequestHeader("cookie", cookies)
+                                request.addRequestHeader("User-Agent", userAgent)
+                                request.setDescription("Downloading file...")
+                                request.setTitle(android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype))
+                                request.allowScanningByMediaScanner()
+                                request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                request.setDestinationInExternalPublicDir(
+                                    android.os.Environment.DIRECTORY_DOWNLOADS,
+                                    android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype)
+                                )
+                                val dm = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                                dm.enqueue(request)
+                                android.widget.Toast.makeText(context, "Downloading File...", android.widget.Toast.LENGTH_LONG).show()
                             }
                             
                             if (tab.url.value.isNotEmpty() && tab.url.value != "about:blank") {
@@ -562,17 +744,17 @@ fun BrowserApp(
                             lastInteractionTime = System.currentTimeMillis()
                             fullScreenMode = !fullScreenMode 
                         },
-                        modifier = Modifier.size(56.dp),
+                        modifier = Modifier.size(44.dp),
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        shadowElevation = 6.dp
+                        shadowElevation = 4.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 if (fullScreenMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, 
                                 contentDescription = "Toggle Fullscreen", 
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -602,7 +784,7 @@ fun BrowserApp(
             onImmersiveChange = onImmersiveChange,
             showFullScreenButton = showFullScreenButton,
             onShowFullScreenButtonChange = { 
-                showFullScreenButton = it
+                onShowFullScreenButtonChange(it)
                 if (!it) fullScreenMode = false
             },
             onBack = { showSettings = false }
@@ -652,6 +834,72 @@ fun BrowserApp(
             },
             onClearHistory = { history.clear() }
         )
+    }
+
+    if (showDownloads) {
+        DownloadsScreen(
+            onClose = { showDownloads = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DownloadsScreen(
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    var downloadedFiles by remember { mutableStateOf<List<java.io.File>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+        if (downloadDir.exists() && downloadDir.isDirectory) {
+            downloadedFiles = downloadDir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() } ?: emptyList()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Downloads") },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        if (downloadedFiles.isEmpty()) {
+            Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No downloads yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.padding(innerPadding).fillMaxSize()
+            ) {
+                items(downloadedFiles.size) { index ->
+                    val file = downloadedFiles[index]
+                    ListItem(
+                        headlineContent = { Text(file.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        supportingContent = { Text("${file.length() / 1024} KB") },
+                        leadingContent = { Icon(Icons.Default.Download, contentDescription = null) },
+                        modifier = Modifier.clickable {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                            intent.setDataAndType(uri, "*/*")
+                            intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(context, "Cannot open file", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                    HorizontalDivider()
+                }
+            }
+        }
     }
 }
 
