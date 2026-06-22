@@ -196,16 +196,16 @@ fun BrowserApp(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     IconButton(onClick = { currentTab.webView?.goBack(); isMenuOpen = false }, enabled = canGoBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canGoBack) 1f else 0.38f))
                     }
                     IconButton(onClick = { currentTab.webView?.goForward(); isMenuOpen = false }, enabled = canGoForward, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canGoForward) 1f else 0.38f))
                     }
                     IconButton(onClick = { isMenuOpen = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
-                        Icon(Icons.Default.StarBorder, contentDescription = "Favorite")
+                        Icon(Icons.Default.StarBorder, contentDescription = "Favorite", tint = MaterialTheme.colorScheme.onSurface)
                     }
                     IconButton(onClick = { currentTab.webView?.reload(); isMenuOpen = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Reload")
+                        Icon(Icons.Default.Refresh, contentDescription = "Reload", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
                 
@@ -241,11 +241,6 @@ fun BrowserApp(
                     clip = true
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)
                 }
-                .clickable(
-                    enabled = isMenuOpen,
-                    indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                ) { isMenuOpen = false }
         ) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -496,6 +491,17 @@ fun BrowserApp(
                 }
             }
         }
+        }
+
+        if (isMenuOpen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    ) { isMenuOpen = false }
+            )
         }
     }
     }
