@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Settings
@@ -46,6 +47,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import com.example.ui.theme.MyApplicationTheme
 
 import androidx.core.view.WindowCompat
@@ -116,6 +120,7 @@ fun BrowserApp(
     immersiveMode: Boolean,
     onImmersiveChange: (Boolean) -> Unit
 ) {
+    var isMenuOpen by remember { mutableStateOf(false) }
     val tabs = remember { androidx.compose.runtime.mutableStateListOf(TabState()) }
     var currentTabIndex by remember { androidx.compose.runtime.mutableIntStateOf(0) }
 
@@ -145,8 +150,10 @@ fun BrowserApp(
         }
     }
 
-    BackHandler(enabled = canGoBack || !isHome || showSettings || showTabManagement || showHistory || appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
-        if (appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
+    BackHandler(enabled = isMenuOpen || canGoBack || !isHome || showSettings || showTabManagement || showHistory || appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
+        if (isMenuOpen) {
+            isMenuOpen = false
+        } else if (appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
             focusManager.clearFocus()
             appBarSuggestions = emptyList()
             isInputUrlFocused = false
@@ -166,9 +173,83 @@ fun BrowserApp(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidth = with(androidx.compose.ui.platform.LocalDensity.current) { configuration.screenWidthDp.dp.toPx() }
+    val animatedOffsetPx by animateFloatAsState(targetValue = if (isMenuOpen) -screenWidth * 0.65f else 0f, label = "offset")
+    val animatedScale by animateFloatAsState(targetValue = if (isMenuOpen) 0.85f else 1f, label = "scale")
+    val cornerRadius by animateDpAsState(targetValue = if (isMenuOpen) 32.dp else 0.dp, label = "corner")
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
+        // Menu Content on the right
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.65f)
+                .align(Alignment.CenterEnd)
+                .padding(vertical = 48.dp, horizontal = 16.dp),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text("Menu", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 24.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    IconButton(onClick = { currentTab.webView?.goBack(); isMenuOpen = false }, enabled = canGoBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    IconButton(onClick = { currentTab.webView?.goForward(); isMenuOpen = false }, enabled = canGoForward, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
+                    }
+                    IconButton(onClick = { isMenuOpen = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
+                        Icon(Icons.Default.StarBorder, contentDescription = "Favorite")
+                    }
+                    IconButton(onClick = { currentTab.webView?.reload(); isMenuOpen = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape)) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Reload")
+                    }
+                }
+                
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("New tab", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold)) },
+                    leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
+                    modifier = Modifier.clickable { isMenuOpen = false; tabs.add(TabState()); currentTabIndex = tabs.lastIndex },
+                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                )
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("History", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold)) },
+                    leadingContent = { Icon(Icons.Default.History, contentDescription = null) },
+                    modifier = Modifier.clickable { isMenuOpen = false; showHistory = true },
+                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                )
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("Settings", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold)) },
+                    leadingContent = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    modifier = Modifier.clickable { isMenuOpen = false; showSettings = true },
+                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                )
+            }
+        }
+
+        // Main App View
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = animatedOffsetPx
+                    scaleX = animatedScale
+                    scaleY = animatedScale
+                    clip = true
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)
+                }
+                .clickable(
+                    enabled = isMenuOpen,
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                ) { isMenuOpen = false }
+        ) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                topBar = {
             Surface(
                 color = MaterialTheme.colorScheme.background,
                 modifier = Modifier.fillMaxWidth()
@@ -186,7 +267,7 @@ fun BrowserApp(
                             inputUrl = ""
                             currentTab.webView?.loadUrl("about:blank")
                         }, modifier = Modifier.size(40.dp)) {
-                            Icon(androidx.compose.ui.res.painterResource(id = R.drawable.ic_home_custom), contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Outlined.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         if (!isHome) {
                             Spacer(modifier = Modifier.width(4.dp))
@@ -266,127 +347,8 @@ fun BrowserApp(
                             Text("${tabs.size}", style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface))
                         }
                         Spacer(modifier = Modifier.width(16.dp))
-                        var menuExpanded by remember { mutableStateOf(false) }
-
-                        Box(contentAlignment = Alignment.Center) {
-                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
-                            }
-                            
-                            if (menuExpanded) {
-                                androidx.compose.ui.window.Popup(
-                                    alignment = Alignment.TopEnd,
-                                    offset = androidx.compose.ui.unit.IntOffset(x = 12, y = -32),
-                                    onDismissRequest = { menuExpanded = false },
-                                    properties = androidx.compose.ui.window.PopupProperties(focusable = true)
-                                ) {
-                                    var appear by remember { mutableStateOf(false) }
-                                    LaunchedEffect(Unit) { appear = true }
-                                    
-                                    val coroutineScope = rememberCoroutineScope()
-                                    fun dismiss() {
-                                        coroutineScope.launch {
-                                            appear = false
-                                            kotlinx.coroutines.delay(150)
-                                            menuExpanded = false
-                                        }
-                                    }
-
-                                    androidx.compose.animation.AnimatedVisibility(
-                                        visible = appear,
-                                        enter = androidx.compose.animation.scaleIn(initialScale = 0.9f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)),
-                                        exit = androidx.compose.animation.scaleOut(targetScale = 0.9f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f), animationSpec = androidx.compose.animation.core.tween(150)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
-                                    ) {
-                                        Surface(
-                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                            shadowElevation = 8.dp,
-                                            modifier = Modifier.width(260.dp)
-                                        ) {
-                                            Column {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    @Composable
-                                                    fun TopMenuButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDesc: String, enabled: Boolean = true) {
-                                                        Surface(
-                                                            onClick = onClick,
-                                                            enabled = enabled,
-                                                            shape = CircleShape,
-                                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                                            modifier = Modifier.size(40.dp)
-                                                        ) {
-                                                            Box(contentAlignment = Alignment.Center) {
-                                                                Icon(icon, contentDescription = contentDesc, tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f), modifier = Modifier.size(22.dp))
-                                                            }
-                                                        }
-                                                    }
-
-                                                    TopMenuButton(
-                                                        onClick = { currentTab.webView?.goBack(); dismiss() },
-                                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                                        contentDesc = "Back",
-                                                        enabled = canGoBack
-                                                    )
-                                                    TopMenuButton(
-                                                        onClick = { currentTab.webView?.goForward(); dismiss() },
-                                                        icon = Icons.AutoMirrored.Filled.ArrowForward,
-                                                        contentDesc = "Forward",
-                                                        enabled = canGoForward
-                                                    )
-                                                    TopMenuButton(
-                                                        onClick = { dismiss() },
-                                                        icon = Icons.Default.StarBorder,
-                                                        contentDesc = "Favorite"
-                                                    )
-                                                    TopMenuButton(
-                                                        onClick = { currentTab.webView?.reload(); dismiss() },
-                                                        icon = Icons.Default.Refresh,
-                                                        contentDesc = "Reload"
-                                                    )
-                                                }
-                                                
-                                                DropdownMenuItem(
-                                                    text = { Text("New tab", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)) },
-                                                    leadingIcon = { 
-                                                        Box(
-                                                            contentAlignment = Alignment.Center,
-                                                            modifier = Modifier
-                                                                .size(24.dp)
-                                                                .border(3.dp, MaterialTheme.colorScheme.onSurface, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                                                        ) {
-                                                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
-                                                        }
-                                                    },
-                                                    onClick = { 
-                                                        dismiss()
-                                                        tabs.add(TabState())
-                                                        currentTabIndex = tabs.lastIndex
-                                                    }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("History", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) },
-                                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface) },
-                                                    onClick = { 
-                                                        dismiss()
-                                                        showHistory = true
-                                                    }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("Settings", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) },
-                                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface) },
-                                                    onClick = { 
-                                                        dismiss()
-                                                        showSettings = true
-                                                    }
-                                                )
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        IconButton(onClick = { isMenuOpen = !isMenuOpen }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
                         }
                     }
                     if (isLoading) {
@@ -534,6 +496,8 @@ fun BrowserApp(
                 }
             }
         }
+        }
+    }
     }
 
     if (showSettings) {
