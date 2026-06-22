@@ -203,10 +203,20 @@ fun BrowserApp(
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val hasAll = permissions.values.all { it }
         pendingWebViewPermissionRequest?.let { req ->
-            if (hasAll) {
-                req.grant(req.resources)
+            val grantedResources = mutableListOf<String>()
+            req.resources.forEach { res ->
+                val androidPerm = when (res) {
+                    android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE -> android.Manifest.permission.CAMERA
+                    android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE -> android.Manifest.permission.RECORD_AUDIO
+                    else -> null
+                }
+                if (androidPerm == null || permissions.getOrDefault(androidPerm, false) || androidx.core.content.ContextCompat.checkSelfPermission(context, androidPerm) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    grantedResources.add(res)
+                }
+            }
+            if (grantedResources.isNotEmpty()) {
+                req.grant(grantedResources.toTypedArray())
             } else {
                 req.deny()
             }
@@ -219,8 +229,9 @@ fun BrowserApp(
     val geoPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val hasAll = permissions.values.all { it }
-        pendingGeoCallback?.invoke(pendingGeoOrigin, hasAll, false)
+        val hasFine = permissions.getOrDefault(android.Manifest.permission.ACCESS_FINE_LOCATION, false) || androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasCoarse = permissions.getOrDefault(android.Manifest.permission.ACCESS_COARSE_LOCATION, false) || androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        pendingGeoCallback?.invoke(pendingGeoOrigin, hasFine || hasCoarse, false)
         pendingGeoCallback = null
         pendingGeoOrigin = null
     }
@@ -575,17 +586,31 @@ fun BrowserApp(
                                 override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
                                     if (request == null) return
                                     val androidPermissions = mutableListOf<String>()
+                                    val alreadyGrantedResources = mutableListOf<String>()
                                     request.resources.forEach { res ->
                                         when (res) {
-                                            android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE -> androidPermissions.add(android.Manifest.permission.CAMERA)
-                                            android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE -> androidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
+                                            android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
+                                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                    androidPermissions.add(android.Manifest.permission.CAMERA)
+                                                } else {
+                                                    alreadyGrantedResources.add(res)
+                                                }
+                                            }
+                                            android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
+                                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                    androidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
+                                                } else {
+                                                    alreadyGrantedResources.add(res)
+                                                }
+                                            }
+                                            else -> alreadyGrantedResources.add(res)
                                         }
                                     }
                                     if (androidPermissions.isNotEmpty()) {
                                         pendingWebViewPermissionRequest = request
                                         permissionLauncher.launch(androidPermissions.toTypedArray())
                                     } else {
-                                        request.grant(request.resources)
+                                        request.grant(alreadyGrantedResources.toTypedArray())
                                     }
                                 }
 
@@ -593,14 +618,20 @@ fun BrowserApp(
                                     origin: String?,
                                     callback: android.webkit.GeolocationPermissions.Callback?
                                 ) {
-                                    pendingGeoOrigin = origin
-                                    pendingGeoCallback = callback
-                                    geoPermissionLauncher.launch(
-                                        arrayOf(
-                                            android.Manifest.permission.ACCESS_FINE_LOCATION,
-                                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                                        androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        callback?.invoke(origin, true, false)
+                                    } else {
+                                        pendingGeoOrigin = origin
+                                        pendingGeoCallback = callback
+                                        geoPermissionLauncher.launch(
+                                            arrayOf(
+                                                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                                android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                             
