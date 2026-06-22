@@ -187,58 +187,62 @@ fun BrowserApp(
                         }, modifier = Modifier.size(40.dp)) {
                             Icon(Icons.Outlined.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        OutlinedTextField(
-                            value = inputUrl,
-                            onValueChange = { inputUrl = it },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(52.dp)
-                                .onFocusChanged { isInputUrlFocused = it.isFocused },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Uri,
-                                imeAction = ImeAction.Go
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onGo = {
-                                    val url = inputUrl.trim()
-                                    if (url.isNotEmpty()) {
-                                        keyboardController?.hide()
-                                        focusManager.clearFocus()
-                                        val loadUrl = if (android.util.Patterns.WEB_URL.matcher(url).matches() || url.startsWith("http://") || url.startsWith("https://")) {
-                                            if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
-                                        } else {
-                                            "https://www.google.com/search?q=${java.net.URLEncoder.encode(url, "UTF-8")}"
+                        if (!isHome) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            OutlinedTextField(
+                                value = inputUrl,
+                                onValueChange = { inputUrl = it },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp)
+                                    .onFocusChanged { isInputUrlFocused = it.isFocused },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Uri,
+                                    imeAction = ImeAction.Go
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onGo = {
+                                        val url = inputUrl.trim()
+                                        if (url.isNotEmpty()) {
+                                            keyboardController?.hide()
+                                            focusManager.clearFocus()
+                                            val loadUrl = if (android.util.Patterns.WEB_URL.matcher(url).matches() || url.startsWith("http://") || url.startsWith("https://")) {
+                                                if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
+                                            } else {
+                                                "https://www.google.com/search?q=${java.net.URLEncoder.encode(url, "UTF-8")}"
+                                            }
+                                            currentTab.url.value = loadUrl
+                                            currentTab.webView?.loadUrl(loadUrl)
                                         }
-                                        currentTab.url.value = loadUrl
-                                        currentTab.webView?.loadUrl(loadUrl)
                                     }
-                                }
-                            ),
-                            leadingIcon = {
-                                Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            },
-                            shape = CircleShape,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp)
+                                ),
+                                leadingIcon = {
+                                    Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                },
+                                shape = CircleShape,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                                ),
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp)
+                                )
                             )
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(onClick = { 
-                            tabs.add(TabState())
-                            currentTabIndex = tabs.lastIndex
-                        }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Default.Add, contentDescription = "New Tab", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(onClick = { 
+                                tabs.add(TabState())
+                                currentTabIndex = tabs.lastIndex
+                            }, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Default.Add, contentDescription = "New Tab", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
