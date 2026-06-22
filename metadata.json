@@ -1,0 +1,6 @@
+{
+  "name": "Lightweight Browser",
+  "description": "A fast and lightweight web browser.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
