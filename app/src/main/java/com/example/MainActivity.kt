@@ -51,6 +51,12 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import java.net.HttpURLConnection
+import java.net.URL
 
 enum class ThemeMode { System, Light, Dark }
 
@@ -127,9 +133,24 @@ fun BrowserApp(
     val isHome = currentUrl.isEmpty() || currentUrl == "about:blank"
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    var isInputUrlFocused by remember { mutableStateOf(false) }
+    var appBarSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    BackHandler(enabled = canGoBack || !isHome || showSettings || showTabManagement || showHistory) {
-        if (showSettings) {
+    LaunchedEffect(inputUrl, isInputUrlFocused) {
+        if (isInputUrlFocused && inputUrl.trim().isNotEmpty() && inputUrl != currentUrl) {
+            appBarSuggestions = fetchSuggestions(inputUrl.trim())
+        } else {
+            appBarSuggestions = emptyList()
+        }
+    }
+
+    BackHandler(enabled = canGoBack || !isHome || showSettings || showTabManagement || showHistory || appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
+        if (appBarSuggestions.isNotEmpty() || isInputUrlFocused) {
+            focusManager.clearFocus()
+            appBarSuggestions = emptyList()
+            isInputUrlFocused = false
+            inputUrl = currentUrl
+        } else if (showSettings) {
             showSettings = false
         } else if (showTabManagement) {
             showTabManagement = false
@@ -172,7 +193,8 @@ fun BrowserApp(
                             onValueChange = { inputUrl = it },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp),
+                                .height(52.dp)
+                                .onFocusChanged { isInputUrlFocused = it.isFocused },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Uri,
@@ -190,6 +212,7 @@ fun BrowserApp(
                                             "https://www.google.com/search?q=${java.net.URLEncoder.encode(url, "UTF-8")}"
                                         }
                                         currentTab.url.value = loadUrl
+                                        currentTab.webView?.loadUrl(loadUrl)
                                     }
                                 }
                             ),
@@ -399,9 +422,6 @@ fun BrowserApp(
                     },
                     update = {
                         it.visibility = if (isTabVisible) android.view.View.VISIBLE else android.view.View.GONE
-                        if (isTabVisible && tab.url.value.isNotEmpty() && tab.url.value != "about:blank" && it.url != tab.url.value) {
-                            it.loadUrl(tab.url.value)
-                        }
                     }
                 )
                 }
@@ -418,8 +438,39 @@ fun BrowserApp(
                             "https://www.google.com/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
                         }
                         currentTab.url.value = loadUrl
+                        currentTab.webView?.loadUrl(loadUrl)
                     }
                 )
+            }
+            
+            if (appBarSuggestions.isNotEmpty()) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 8.dp
+                ) {
+                    androidx.compose.foundation.lazy.LazyColumn {
+                        items(appBarSuggestions.size) { index ->
+                            val suggestion = appBarSuggestions[index]
+                            androidx.compose.material3.ListItem(
+                                headlineContent = { Text(suggestion) },
+                                leadingContent = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                modifier = Modifier.clickable {
+                                    focusManager.clearFocus()
+                                    isInputUrlFocused = false
+                                    keyboardController?.hide()
+                                    inputUrl = suggestion
+                                    val loadUrl = "https://www.google.com/search?q=${java.net.URLEncoder.encode(suggestion, "UTF-8")}"
+                                    currentTab.url.value = loadUrl
+                                    currentTab.webView?.loadUrl(loadUrl)
+                                }
+                            )
+                            if (index < appBarSuggestions.lastIndex) {
+                                androidx.compose.material3.HorizontalDivider()
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -684,31 +735,92 @@ fun BrowserHomeScreen(
         
         Spacer(modifier = Modifier.height(48.dp))
         var inputQuery by remember { mutableStateOf("") }
+        var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
         val focusManager = LocalFocusManager.current
-        OutlinedTextField(
-            value = inputQuery,
-            onValueChange = { inputQuery = it },
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .height(56.dp),
-            placeholder = { Text("Search or type URL") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            shape = CircleShape,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface
-            ),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = { 
-                if (inputQuery.trim().isNotEmpty()) {
-                    focusManager.clearFocus()
-                    onSearch(inputQuery.trim())
-                    inputQuery = ""
+        val keyboardController = LocalSoftwareKeyboardController.current
+        
+        LaunchedEffect(inputQuery) {
+            if (inputQuery.trim().isNotEmpty()) {
+                val results = fetchSuggestions(inputQuery.trim())
+                suggestions = results
+            } else {
+                suggestions = emptyList()
+            }
+        }
+        
+        Box(modifier = Modifier.fillMaxWidth(0.9f)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = inputQuery,
+                    onValueChange = { inputQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search or type URL") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    shape = if (suggestions.isNotEmpty()) androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp) else CircleShape,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { 
+                        if (inputQuery.trim().isNotEmpty()) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onSearch(inputQuery.trim())
+                            inputQuery = ""
+                        }
+                    })
+                )
+                
+                if (suggestions.isNotEmpty()) {
+                    androidx.compose.material3.Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column {
+                            suggestions.forEach { suggestion ->
+                                androidx.compose.material3.ListItem(
+                                    headlineContent = { Text(suggestion) },
+                                    leadingContent = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    modifier = Modifier.clickable {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        onSearch(suggestion)
+                                        inputQuery = ""
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
-            })
-        )
+            }
+        }
+    }
+}
+
+suspend fun fetchSuggestions(query: String): List<String> = withContext(Dispatchers.IO) {
+    if (query.isBlank()) return@withContext emptyList()
+    try {
+        val url = URL("https://suggestqueries.google.com/complete/search?client=chrome&q=${java.net.URLEncoder.encode(query, "UTF-8")}")
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 3000
+        connection.readTimeout = 3000
+        val response = connection.inputStream.bufferedReader().use { it.readText() }
+        val jsonArray = JSONArray(response)
+        val suggestionsArray = jsonArray.getJSONArray(1)
+        val suggestions = mutableListOf<String>()
+        val maxSuggestions = minOf(suggestionsArray.length(), 6)
+        for (i in 0 until maxSuggestions) {
+            suggestions.add(suggestionsArray.getString(i))
+        }
+        suggestions
+    } catch (e: Exception) {
+        emptyList()
     }
 }
