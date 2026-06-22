@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.shape.CircleShape
@@ -118,15 +120,19 @@ fun BrowserApp(
 
     var showSettings by remember { mutableStateOf(false) }
     var showTabManagement by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    val history = remember { androidx.compose.runtime.mutableStateListOf<String>() }
 
     val isHome = currentUrl.isEmpty() || currentUrl == "about:blank"
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    BackHandler(enabled = canGoBack || !isHome || showSettings || showTabManagement) {
+    BackHandler(enabled = canGoBack || !isHome || showSettings || showTabManagement || showHistory) {
         if (showSettings) {
             showSettings = false
         } else if (showTabManagement) {
             showTabManagement = false
+        } else if (showHistory) {
+            showHistory = false
         } else if (canGoBack) {
             currentTab.webView?.goBack()
         } else {
@@ -278,6 +284,14 @@ fun BrowserApp(
                                     }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("History") },
+                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+                                    onClick = { 
+                                        menuExpanded = false
+                                        showHistory = true
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Settings") },
                                     leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
                                     onClick = { 
@@ -328,6 +342,12 @@ fun BrowserApp(
                                     url?.let { 
                                         tab.url.value = it 
                                         if (currentTabIndex == index) inputUrl = it
+                                        if (it.isNotEmpty() && it != "about:blank") {
+                                            if (history.contains(it)) {
+                                                history.remove(it)
+                                            }
+                                            history.add(0, it)
+                                        }
                                     }
                                     tab.canGoBack.value = view?.canGoBack() == true
                                     tab.canGoForward.value = view?.canGoForward() == true
@@ -435,6 +455,68 @@ fun BrowserApp(
             },
             onBack = { showTabManagement = false }
         )
+    }
+
+    if (showHistory) {
+        HistoryScreen(
+            history = history,
+            onClose = { showHistory = false },
+            onUrlClick = { url ->
+                showHistory = false
+                currentTab.url.value = url
+                currentTab.webView?.loadUrl(url)
+            },
+            onClearHistory = { history.clear() }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HistoryScreen(
+    history: List<String>,
+    onClose: () -> Unit,
+    onUrlClick: (String) -> Unit,
+    onClearHistory: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("History") },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (history.isNotEmpty()) {
+                        IconButton(onClick = onClearHistory) {
+                            Icon(Icons.Default.Delete, contentDescription = "Clear History")
+                        }
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        if (history.isEmpty()) {
+            Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No history yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.padding(innerPadding).fillMaxSize()
+            ) {
+                items(history.size) { index ->
+                    val url = history[index]
+                    ListItem(
+                        headlineContent = { Text(url, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        leadingContent = { Icon(Icons.Default.History, contentDescription = null) },
+                        modifier = Modifier.clickable { onUrlClick(url) }
+                    )
+                    HorizontalDivider()
+                }
+            }
+        }
     }
 }
 
