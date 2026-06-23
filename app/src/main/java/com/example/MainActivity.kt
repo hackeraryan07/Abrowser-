@@ -112,7 +112,9 @@ class MainActivity : ComponentActivity() {
                 val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
                 if (immersiveMode) {
                     windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+                    if (!isImeVisible) {
+                        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+                    }
                 } else {
                     windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
                 }
@@ -246,6 +248,8 @@ fun BrowserApp(
         pendingDownloadAction?.invoke()
         pendingDownloadAction = null
     }
+
+    val popupWebViews = remember { androidx.compose.runtime.mutableStateListOf<WebView>() }
 
     LaunchedEffect(tabs.map { it.url.value }, currentTabIndex) {
         val jsonArray = org.json.JSONArray()
@@ -442,6 +446,7 @@ fun BrowserApp(
                                                 "https://www.google.com/search?q=${java.net.URLEncoder.encode(url, "UTF-8")}"
                                             }
                                             currentTab.url.value = loadUrl
+                                            currentTab.webView?.visibility = android.view.View.VISIBLE
                                             currentTab.webView?.loadUrl(loadUrl)
                                         }
                                     }
@@ -536,6 +541,21 @@ fun BrowserApp(
                             
                             val hostWebView = this
                             webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                                    val url = request?.url?.toString() ?: return false
+                                    if (url.startsWith("http://") || url.startsWith("https://")) {
+                                        return false
+                                    } else {
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                            view?.context?.startActivity(intent)
+                                            return true
+                                        } catch (e: Exception) {
+                                            return true
+                                        }
+                                    }
+                                }
+
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                     super.onPageStarted(view, url, favicon)
                                     tab.isLoading.value = true
@@ -584,13 +604,40 @@ fun BrowserApp(
                                     resultMsg: android.os.Message?
                                 ): Boolean {
                                     val newWebView = WebView(context).apply {
+                                        this.layoutParams = ViewGroup.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
+                                        settings.apply {
+                                            javaScriptEnabled = true
+                                            domStorageEnabled = true
+                                            setSupportMultipleWindows(true)
+                                            javaScriptCanOpenWindowsAutomatically = true
+                                            userAgentString = hostWebView.settings.userAgentString
+                                        }
+                                        webChromeClient = object : WebChromeClient() {
+                                            override fun onCloseWindow(window: WebView?) {
+                                                window?.let { popupWebViews.remove(it) }
+                                            }
+                                        }
                                         webViewClient = object : WebViewClient() {
                                             override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                                                hostWebView.loadUrl(request?.url.toString())
-                                                return true
+                                                val url = request?.url?.toString() ?: return false
+                                                if (url.startsWith("http://") || url.startsWith("https://")) {
+                                                    return false
+                                                } else {
+                                                    try {
+                                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                                        context.startActivity(intent)
+                                                        return true
+                                                    } catch (e: Exception) {
+                                                        return true
+                                                    }
+                                                }
                                             }
                                         }
                                     }
+                                    popupWebViews.add(newWebView)
                                     val transport = resultMsg?.obj as? WebView.WebViewTransport
                                     transport?.webView = newWebView
                                     resultMsg?.sendToTarget()
@@ -732,6 +779,7 @@ fun BrowserApp(
                             "https://www.google.com/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
                         }
                         currentTab.url.value = loadUrl
+                        currentTab.webView?.visibility = android.view.View.VISIBLE
                         currentTab.webView?.loadUrl(loadUrl)
                     }
                 )
@@ -756,6 +804,7 @@ fun BrowserApp(
                                     inputUrl = suggestion
                                     val loadUrl = "https://www.google.com/search?q=${java.net.URLEncoder.encode(suggestion, "UTF-8")}"
                                     currentTab.url.value = loadUrl
+                                    currentTab.webView?.visibility = android.view.View.VISIBLE
                                     currentTab.webView?.loadUrl(loadUrl)
                                 }
                             )
@@ -846,6 +895,30 @@ fun BrowserApp(
                 }
             }
         }
+        }
+
+        if (popupWebViews.isNotEmpty()) {
+            popupWebViews.forEach { popupWebView ->
+                androidx.compose.ui.window.Dialog(
+                    onDismissRequest = { popupWebViews.remove(popupWebView) },
+                    properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                ) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AndroidView(
+                                factory = { popupWebView },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            IconButton(
+                                onClick = { popupWebViews.remove(popupWebView) },
+                                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).background(MaterialTheme.colorScheme.surface.copy(alpha=0.7f), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Close Popup", tint = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (isMenuOpen) {
