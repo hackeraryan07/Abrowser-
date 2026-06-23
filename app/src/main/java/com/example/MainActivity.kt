@@ -81,6 +81,7 @@ class TabState(
     var isLoading: androidx.compose.runtime.MutableState<Boolean> = androidx.compose.runtime.mutableStateOf(false)
 )
 
+@androidx.compose.foundation.layout.ExperimentalLayoutApi
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,7 +106,9 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.Dark -> true
             }
 
-            LaunchedEffect(immersiveMode) {
+            val isImeVisible = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+
+            LaunchedEffect(immersiveMode, isImeVisible) {
                 val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
                 if (immersiveMode) {
                     windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
