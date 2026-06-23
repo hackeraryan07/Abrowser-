@@ -273,6 +273,12 @@ fun BrowserApp(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     var isInputUrlFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentUrl, isInputUrlFocused) {
+        if (!isInputUrlFocused) {
+            inputUrl = currentUrl
+        }
+    }
     var appBarSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(inputUrl, isInputUrlFocused) {
@@ -532,7 +538,6 @@ fun BrowserApp(
                                     tab.isLoading.value = true
                                     url?.let { 
                                         tab.url.value = it 
-                                        if (currentTabIndex == index) inputUrl = it
                                         if (it.isNotEmpty() && it != "about:blank") {
                                             if (history.contains(it)) {
                                                 history.remove(it)
@@ -544,6 +549,19 @@ fun BrowserApp(
                                     tab.canGoForward.value = view?.canGoForward() == true
                                 }
         
+                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                    super.doUpdateVisitedHistory(view, url, isReload)
+                                    url?.let {
+                                        tab.url.value = it
+                                        if (it.isNotEmpty() && it != "about:blank") {
+                                            if (history.contains(it)) {
+                                                history.remove(it)
+                                            }
+                                            history.add(0, it)
+                                        }
+                                    }
+                                }
+
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
                                     tab.isLoading.value = false
@@ -552,7 +570,6 @@ fun BrowserApp(
                                     view?.title?.let { t -> tab.title.value = t }
                                     url?.let { 
                                         tab.url.value = it 
-                                        if (currentTabIndex == index) inputUrl = it
                                     }
                                 }
                             }
