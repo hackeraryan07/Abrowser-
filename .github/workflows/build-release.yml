@@ -1,0 +1,47 @@
+name: Build Release APK
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '9.3.1'
+
+    - name: Decode Release Keystore
+      env:
+        RELEASE_KEY: ${{ secrets.Release_Key }}
+      run: |
+        echo "$RELEASE_KEY" | base64 --decode > release.keystore
+
+    - name: Build Release APK
+      env:
+        KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
+        KEY_ALIAS: my_release_key
+        STORE_PASSWORD: Aryan@2026
+        KEY_PASSWORD: Aryan@2026
+      run: gradle assembleRelease
+
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release
+        path: app/build/outputs/apk/release/app-release.apk
