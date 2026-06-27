@@ -32,16 +32,22 @@ jobs:
       run: |
         echo "$RELEASE_KEY" | base64 --decode > release.keystore
 
-    - name: Build Release APK
+    - name: Build Release APK and AAB
       env:
         KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
         KEY_ALIAS: my_release_key
         STORE_PASSWORD: Aryan@2026
         KEY_PASSWORD: Aryan@2026
-      run: gradle assembleRelease
+      run: gradle assembleRelease bundleRelease
 
-    - name: Upload Release APK
+    - name: Upload Release APKs
       uses: actions/upload-artifact@v4
       with:
-        name: app-release
-        path: app/build/outputs/apk/release/app-release.apk
+        name: app-release-apks
+        path: app/build/outputs/apk/release/*.apk
+
+    - name: Upload Release AAB
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release-aab
+        path: app/build/outputs/bundle/release/app-release.aab
