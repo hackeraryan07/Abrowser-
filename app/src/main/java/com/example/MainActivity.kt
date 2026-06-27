@@ -534,7 +534,7 @@ fun BrowserApp(
                             settings.setGeolocationEnabled(true)
                             settings.allowFileAccess = true
                             settings.allowContentAccess = true
-                            settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                            settings.userAgentString = settings.userAgentString.replace("; wv", "")
                             settings.setSupportMultipleWindows(true)
                             settings.javaScriptCanOpenWindowsAutomatically = true
                             android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
